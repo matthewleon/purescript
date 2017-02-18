@@ -150,6 +150,7 @@ errorCode em = case unwrapErrorMessage em of
   IncompleteExhaustivityCheck{} -> "IncompleteExhaustivityCheck"
   MisleadingEmptyTypeImport{} -> "MisleadingEmptyTypeImport"
   ImportHidingModule{} -> "ImportHidingModule"
+  RedundantImport{} -> "RedundantImport"
   UnusedImport{} -> "UnusedImport"
   UnusedExplicitImport{} -> "UnusedExplicitImport"
   UnusedDctorImport{} -> "UnusedDctorImport"
@@ -798,8 +799,10 @@ prettyPrintSingleError (PPEOptions codeColor full level showDocs) e = flip evalS
       paras [ line "An exhaustivity check was abandoned due to too many possible cases."
             , line "You may want to decompose your data types into smaller types."
             ]
-    renderSimpleErrorMessage (UnusedImport name) =
+    renderSimpleErrorMessage (RedundantImport name) =
       line $ "The import of module " <> markCode (runModuleName name) <> " is redundant"
+    renderSimpleErrorMessage (UnusedImport name) =
+      line $ "The import of module " <> markCode (runModuleName name) <> " is unused"
 
     renderSimpleErrorMessage msg@(UnusedExplicitImport mn names _ _) =
       paras [ line $ "The import of module " <> markCode (runModuleName mn) <> " contains the following unused references:"

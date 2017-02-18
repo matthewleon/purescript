@@ -39,6 +39,8 @@ type UsedImports = M.Map ModuleName [Qualified Name]
 --
 -- * Unused import statements (qualified or unqualified)
 --
+-- * Redundant import statements (qualified or unqualified)
+--
 -- * Unused references in an explicit import list
 --
 -- * Implicit imports of modules
@@ -58,7 +60,6 @@ lintImports
 lintImports (Module _ _ _ _ Nothing) _ _ =
   internalError "lintImports needs desugared exports"
 lintImports (Module ss _ mn mdecls (Just mexports)) env usedImps = do
-
   -- TODO: this needs some work to be easier to understand
 
   let scope = maybe primImports (\(_, imps', _) -> imps') (M.lookup mn env)
@@ -238,7 +239,7 @@ lintImportDecl env mni qualifierName names declType allowImplicit =
 
     didWarn <- case (length diff, length idents) of
       (0, _) -> return False
-      (n, m) | n == m -> unused
+      (n, m) | n == m -> redundant
       _ -> warn (UnusedExplicitImport mni diff qualifierName allRefs)
 
     didWarn' <- forM (mapMaybe getTypeRef declrefs) $ \(tn, c) -> do
@@ -256,6 +257,9 @@ lintImportDecl env mni qualifierName names declType allowImplicit =
 
   unused :: m Bool
   unused = warn (UnusedImport mni)
+
+  redundant :: m Bool
+  redundant = warn (RedundantImport mni)
 
   warn :: SimpleErrorMessage -> m Bool
   warn err = tell (errorMessage err) >> return True

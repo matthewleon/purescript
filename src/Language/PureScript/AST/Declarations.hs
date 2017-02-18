@@ -122,6 +122,7 @@ data SimpleErrorMessage
   | IncompleteExhaustivityCheck
   | MisleadingEmptyTypeImport ModuleName (ProperName 'TypeName)
   | ImportHidingModule ModuleName
+  | RedundantImport ModuleName
   | UnusedImport ModuleName
   | UnusedExplicitImport ModuleName [Name] (Maybe ModuleName) [DeclarationRef]
   | UnusedDctorImport ModuleName (ProperName 'TypeName) (Maybe ModuleName) [DeclarationRef]
