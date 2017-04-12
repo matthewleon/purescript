@@ -3,10 +3,16 @@ module Language.PureScript.CoreImp.Optimizer.TCO (tco) where
 
 import Prelude.Compat
 
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Data.Monoid ((<>))
 import Language.PureScript.CoreImp.AST
 import Language.PureScript.AST.SourcePos (SourceSpan)
+
+import Language.PureScript.CodeGen.JS.Printer (prettyPrintJS)
+import Debug.Trace (trace)
+
+traceAST :: AST -> Text -> a -> a
+traceAST ast label = trace (unpack (label <> ": " <> prettyPrintJS [ast]))
 
 -- | Eliminate tail calls
 tco :: AST -> AST
@@ -27,9 +33,10 @@ tco = everywhere convert where
   tcoResult = tcoVar "result"
 
   convert :: AST -> AST
-  convert (VariableIntroduction ss name (Just fn@Function {}))
+  convert old@(VariableIntroduction ss name (Just fn@Function {}))
       | isTailRecursive name body'
-      = VariableIntroduction ss name (Just (replace (toLoop name allArgs body')))
+      = let new = VariableIntroduction ss name (Just (replace (toLoop name allArgs body')))
+        in traceAST old "old" $ traceAST new "new" $ new
     where
       (argss, body', replace) = collectAllFunctionArgs [] id fn
       allArgs = concat $ reverse argss
