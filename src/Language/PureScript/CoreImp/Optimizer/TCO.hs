@@ -7,6 +7,7 @@ import Data.Text (Text, unpack)
 import Data.Monoid ((<>))
 import Language.PureScript.CoreImp.AST
 import Language.PureScript.AST.SourcePos (SourceSpan)
+import Safe (headDef, tailSafe)
 
 import Language.PureScript.CodeGen.JS.Printer (prettyPrintJS)
 import Debug.Trace (trace)
@@ -35,23 +36,47 @@ tco = everywhere convert where
   convert :: AST -> AST
   convert old@(VariableIntroduction ss name (Just fn@Function {}))
       | isTailRecursive name body'
-      = let new = VariableIntroduction ss name (Just (replace (toLoop name allArgs body')))
-        in traceAST old "old" $ traceAST new "new" $ new
+      = let new = VariableIntroduction ss name (Just (replace (toLoop name innerArgs outerArgs body')))
+        in traceAST old "old" $
+	   trace ("argss: " <> show argss) $
+	   traceAST body' "body'" $
+	   traceAST new "new" $ new
     where
-      (argss, body', replace) = collectAllFunctionArgs [] id fn
-      allArgs = concat $ reverse argss
+      (argss, body', replace) = collectFunctionArgs [] id fn
+      innerArgs = headDef [] argss
+      outerArgs = concat $ reverse $ tailSafe argss
   convert js = js
 
-  collectAllFunctionArgs :: [[Text]] -> (AST -> AST) -> AST -> ([[Text]], AST, AST -> AST)
-  collectAllFunctionArgs allArgs f (Function s1 ident args (Block s2 (body@(Return _ _):_))) =
-    collectAllFunctionArgs (args : allArgs) (\b -> f (Function s1 ident (map copyVar args) (Block s2 [b]))) body
-  collectAllFunctionArgs allArgs f (Function ss ident args body@(Block _ _)) =
-    (args : allArgs, body, f . Function ss ident (map copyVar args))
-  collectAllFunctionArgs allArgs f (Return s1 (Function s2 ident args (Block s3 [body]))) =
-    collectAllFunctionArgs (args : allArgs) (\b -> f (Return s1 (Function s2 ident (map copyVar args) (Block s3 [b])))) body
-  collectAllFunctionArgs allArgs f (Return s1 (Function s2 ident args body@(Block _ _))) =
-    (args : allArgs, body, f . Return s1 . Function s2 ident (map copyVar args))
-  collectAllFunctionArgs allArgs f body = (allArgs, body, f)
+  collectFunctionArgs :: [[Text]] -> (AST -> AST) -> AST -> ([[Text]], AST, AST -> AST)
+  collectFunctionArgs allArgs f ast =
+    trace "collect" $
+    trace ("allArgs: " <> show allArgs) $
+    traceAST ast "ast" $
+    collectFunctionArgs' allArgs f ast
+
+    where
+    -- function(args) {return _;} ->
+    -- function(__copy_args) {recurse return}
+    collectFunctionArgs' allArgs f (Function s1 ident args (Block s2 (body@(Return _ _):_))) =
+      collectFunctionArgs (args : allArgs) (\b -> f (Function s1 ident (map copyVar args) (Block s2 [b]))) body
+
+    -- function(args) {body} ->
+    -- done: return collected args, body, and transformation
+    collectFunctionArgs' allArgs f (Function ss ident args body@(Block _ _)) =
+      (args : allArgs, body, f)
+
+    -- return function(args) {singlestatement}; ->
+    -- return function(__copy_args) -> {recurse singlestatement}
+    collectFunctionArgs' allArgs f (Return s1 (Function s2 ident args (Block s3 [body]))) =
+      collectFunctionArgs (args : allArgs) (\b -> f (Return s1 (Function s2 ident (map copyVar args) (Block s3 [b])))) body
+
+    -- return function(args) {multiple statements}; ->
+    -- done: return collected args, body, and transformation
+    collectFunctionArgs' allArgs f (Return s1 (Function s2 ident args body@(Block _ _))) =
+      (args : allArgs, body, f . Return s1 . Function s2 ident (map copyVar args))
+    
+    -- done: return collected args, body, and transformation
+    collectFunctionArgs' allArgs f body = (allArgs, body, f)
 
   isTailRecursive :: Text -> AST -> Bool
   isTailRecursive ident js = countSelfReferences js > 0 && allInTailPosition js where
@@ -86,16 +111,21 @@ tco = everywhere convert where
     allInTailPosition _
       = False
 
-  toLoop :: Text -> [Text] -> AST -> AST
-  toLoop ident allArgs js =
+  toLoop :: Text -> [Text] -> [Text] -> AST -> AST
+  toLoop ident innerArgs outerArgs js =
       Block rootSS $
-        map (\arg -> VariableIntroduction rootSS (tcoVar arg) (Just (Var rootSS (copyVar arg)))) allArgs ++
+        map (\arg -> VariableIntroduction rootSS (tcoVar arg) (Just (Var rootSS (copyVar arg)))) outerArgs ++
         [ VariableIntroduction rootSS tcoDone (Just (BooleanLiteral rootSS False))
         , VariableIntroduction rootSS tcoResult Nothing
-        , Function rootSS (Just tcoLoop) allArgs (Block rootSS [loopify js])
+        , Function rootSS (Just tcoLoop) (outerArgs ++ innerArgs) (Block rootSS [loopify js])
         , While rootSS (Unary rootSS Not (Var rootSS tcoDone))
-            (Block rootSS
-              [(Assignment rootSS (Var rootSS tcoResult) (App rootSS (Var rootSS tcoLoop) (map (Var rootSS . tcoVar) allArgs)))])
+            (Block rootSS [
+	      (Assignment rootSS
+	        (Var rootSS tcoResult)
+	        (App rootSS (Var rootSS tcoLoop) (
+		  (map (Var rootSS . tcoVar) outerArgs) ++
+		  (map (Var rootSS . copyVar) innerArgs)
+		)))])
         , Return rootSS (Var rootSS tcoResult)
         ]
     where
@@ -109,7 +139,9 @@ tco = everywhere convert where
         in
           Block ss $
             zipWith (\val arg ->
-              Assignment ss (Var ss (tcoVar arg)) val) allArgumentValues allArgs
+              Assignment ss (Var ss (tcoVar arg)) val) allArgumentValues outerArgs
+            ++ zipWith (\val arg ->
+              Assignment ss (Var ss (copyVar arg)) val) (drop (length outerArgs) allArgumentValues) innerArgs
             ++ [ ReturnNoResult ss ]
       | otherwise = Block ss [ markDone ss, Return ss ret ]
     loopify (ReturnNoResult ss) = Block ss [ markDone ss, ReturnNoResult ss ]
