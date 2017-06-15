@@ -81,6 +81,8 @@ import           System.FilePath ((</>), takeDirectory, makeRelative, splitPath,
 import           System.IO.Error (tryIOError)
 import qualified Text.Parsec as Parsec
 
+import Debug.Trace (traceM)
+
 -- | Progress messages from the make process
 data ProgressMessage
   = CompilingModule ModuleName
@@ -142,7 +144,9 @@ rebuildModule MakeActions{..} externs m@(Module _ _ moduleName _ _) = do
       withPrim = importPrim m
   lint withPrim
   ((Module ss coms _ elaborated exps, env'), nextVar) <- runSupplyT 0 $ do
+    traceM "desugaring"
     [desugared] <- desugar externs [withPrim]
+    traceM "typechecking"
     runCheck' (emptyCheckState env) $ typeCheckModule desugared
 
   -- desugar case declarations *after* type- and exhaustiveness checking

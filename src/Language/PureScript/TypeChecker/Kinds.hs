@@ -28,6 +28,9 @@ import Language.PureScript.Names
 import Language.PureScript.TypeChecker.Monad
 import Language.PureScript.Types
 
+import Debug.Trace (trace, traceShow, traceM)
+import Language.PureScript.Pretty.Types (prettyPrintType)
+
 -- | Generate a fresh kind variable
 freshKind :: (MonadState CheckState m) => m Kind
 freshKind = do
@@ -105,6 +108,8 @@ kindOfWithScopedVars ::
   Type ->
   m (Kind, [(Text, Kind)])
 kindOfWithScopedVars ty =
+  -- FAILING HERE
+  trace ("kindOfWithScopedVars: " ++ prettyPrintType ty) $
   withErrorMessageHint (ErrorCheckingKind ty) $
     fmap tidyUp . withFreshSubstitution . captureSubstitution $ infer ty
   where

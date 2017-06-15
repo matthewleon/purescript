@@ -24,6 +24,8 @@ import Language.PureScript.Names
 import Language.PureScript.TypeClassDictionaries
 import Language.PureScript.Types
 
+import Debug.Trace (trace, traceShow, traceM)
+
 -- | A substitution of unification variables for types or kinds
 data Substitution = Substitution
   { substType :: M.Map Int Type -- ^ Type substitution
@@ -83,7 +85,7 @@ bindTypes
   => M.Map (Qualified (ProperName 'TypeName)) (Kind, TypeKind)
   -> m a
   -> m a
-bindTypes newNames action = do
+bindTypes newNames action = trace ("bindTypes: " ++ show newNames) $ do
   orig <- get
   modify $ \st -> st { checkEnv = (checkEnv st) { types = newNames `M.union` (types . checkEnv $ st) } }
   a <- action
@@ -97,7 +99,8 @@ withScopedTypeVars
   -> [(Text, Kind)]
   -> m a
   -> m a
-withScopedTypeVars mn ks ma = do
+withScopedTypeVars mn ks ma = trace ("withScopedTypeVars: " ++ show ks) $ do
+-- is this running where it should be?
   orig <- get
   forM_ ks $ \(name, _) ->
     when (Qualified (Just mn) (ProperName name) `M.member` types (checkEnv orig)) $

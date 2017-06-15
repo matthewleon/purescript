@@ -42,6 +42,10 @@ import Language.PureScript.TypeChecker.Synonyms as T
 import Language.PureScript.TypeChecker.Types as T
 import Language.PureScript.TypeClassDictionaries
 import Language.PureScript.Types
+import Language.PureScript.Pretty.Values (prettyPrintValue)
+
+import Debug.Trace (trace, traceShow, traceM)
+import Text.PrettyPrint.Boxes (render)
 
 addDataType
   :: (MonadState CheckState m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
@@ -179,7 +183,7 @@ checkTypeClassInstance
   -> Int -- ^ index of type class argument
   -> Type
   -> m ()
-checkTypeClassInstance cls i = check where
+checkTypeClassInstance cls i ty = trace ("checkTypeClassInstance type: " ++ (show ty)) $ check ty where
   -- If the argument is determined via fundeps then we are less restrictive in
   -- what type is allowed. This is because the type cannot be used to influence
   -- which instance is selected. Currently the only weakened restriction is that
@@ -269,17 +273,20 @@ typeCheckAll moduleName _ = traverse go
     return $ TypeSynonymDeclaration name args ty
   go TypeDeclaration{} =
     internalError "Type declarations should have been removed before typeCheckAlld"
-  go (ValueDeclaration name nameKind [] [MkUnguarded val]) = do
+  go (ValueDeclaration name nameKind [] [MkUnguarded val]) = trace ("typeCheck ValueDeclaration " ++ show name ++ ": " ++ show val) $ trace (render (prettyPrintValue 10 val)) $ do
     env <- getEnv
     warnAndRethrow (addHint (ErrorInValueDeclaration name)) $ do
       val' <- checkExhaustiveExpr env moduleName val
+      traceM "checkExhaustiveExpr: success"
       valueIsNotDefined moduleName name
       [(_, (val'', ty))] <- typesOf NonRecursiveBindingGroup moduleName [(name, val')]
+      traceM "typesOf: success"
       addValue moduleName name ty nameKind
+      traceM "addValue: success"
       return $ ValueDeclaration name nameKind [] [MkUnguarded val'']
   go ValueDeclaration{} = internalError "Binders were not desugared"
   go BoundValueDeclaration{} = internalError "BoundValueDeclaration should be desugared"
-  go (BindingGroupDeclaration vals) = do
+  go (BindingGroupDeclaration vals) = trace "typecheck BindingGroupDeclaration" $ do
     env <- getEnv
     warnAndRethrow (addHint (ErrorInBindingGroup (map (\(ident, _, _) -> ident) vals))) $ do
       for_ vals $ \(ident, _, _) ->
@@ -316,7 +323,7 @@ typeCheckAll moduleName _ = traverse go
   go d@(TypeClassDeclaration pn args implies deps tys) = do
     addTypeClass moduleName pn args implies deps tys
     return d
-  go (d@(TypeInstanceDeclaration dictName deps className tys body)) = rethrow (addHint (ErrorInInstance className tys)) $ do
+  go (d@(TypeInstanceDeclaration dictName deps className tys body)) = rethrow (addHint (ErrorInInstance className tys)) $ trace "checking Type Instance Declaration" $ {- traceShow d0 $ -} do
     env <- getEnv
     case M.lookup className (typeClasses env) of
       Nothing -> internalError "typeCheckAll: Encountered unknown type class in instance declaration"
@@ -325,8 +332,10 @@ typeCheckAll moduleName _ = traverse go
         sequence_ (zipWith (checkTypeClassInstance typeClass) [0..] tys)
         checkOrphanInstance dictName className typeClass tys
         _ <- traverseTypeInstanceBody checkInstanceMembers body
+	traceM "successfully ran checkInstanceMembers"
         let dict = TypeClassDictionaryInScope (Qualified (Just moduleName) dictName) [] className tys (Just deps)
         addTypeClassDictionaries (Just moduleName) . M.singleton className $ M.singleton (tcdValue dict) dict
+	traceM "success addingtypeclassdictionary"
         return d
   go (PositionedDeclaration pos com d) =
     warnAndRethrowWithPosition pos $ PositionedDeclaration pos com <$> go d
@@ -339,7 +348,7 @@ typeCheckAll moduleName _ = traverse go
       throwError . errorMessage $ ClassInstanceArityMismatch dictName className typeClassArity instanceArity
 
   checkInstanceMembers :: [Declaration] -> m [Declaration]
-  checkInstanceMembers instDecls = do
+  checkInstanceMembers instDecls = trace "checkInstanceMembers" $ do
     let idents = sort . map head . group . map memberName $ instDecls
     for_ (firstDuplicate idents) $ \ident ->
       throwError . errorMessage $ DuplicateValueDeclaration ident
@@ -420,6 +429,7 @@ typeCheckModule (Module ss coms mn decls (Just exps)) =
   warnAndRethrow (addHint (ErrorInModule mn)) $ do
     modify (\s -> s { checkCurrentModule = Just mn })
     decls' <- typeCheckAll mn exps decls
+    traceM "typeCheckAll: success"
     for_ exps $ \e -> do
       checkTypesAreExported e
       checkClassMembersAreExported e
