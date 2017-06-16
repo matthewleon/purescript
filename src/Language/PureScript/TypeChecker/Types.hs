@@ -759,7 +759,10 @@ checkProperties expr ps row lax = let (ts, r') = rowToList row in go ps ts r' wh
         ps'' <- go ps' ts rest
         return $ (p, v') : ps''
       Just ty -> do
-        v' <- check v ty
+        Just moduleName <- checkCurrentModule <$> get
+        (kind, args) <- kindOfWithScopedVars ty
+        checkTypeKind ty kind
+        v' <- withScopedTypeVars moduleName args $ check v ty
         ps'' <- go ps' (delete (Label p, ty) ts) r
         return $ (p, v') : ps''
   go _ _ _ = throwError . errorMessage $ ExprDoesNotHaveType expr (TypeApp tyRecord row)
