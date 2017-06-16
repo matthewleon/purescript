@@ -337,6 +337,7 @@ extra-source-files:
       examples/passing/CheckSynonymBug.purs
       examples/passing/CheckTypeClass.purs
       examples/passing/Church.purs
+      examples/passing/ClassMemberScopedTypeVariables.purs
       examples/passing/ClassRefSyntax.purs
       examples/passing/ClassRefSyntax/Lib.purs
       examples/passing/Collatz.purs
@@ -499,6 +500,7 @@ extra-source-files:
       examples/passing/PolyLabels.js
       examples/passing/PolyLabels.purs
       examples/passing/PrimedTypeName.purs
+      examples/passing/PropertyScopedTypeVariables.purs
       examples/passing/QualifiedNames.purs
       examples/passing/QualifiedNames/Either.purs
       examples/passing/QualifiedQualifiedImports.purs
