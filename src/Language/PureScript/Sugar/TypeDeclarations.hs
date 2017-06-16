@@ -16,6 +16,8 @@ import Language.PureScript.Environment
 import Language.PureScript.Errors
 
 import Debug.Trace (trace, traceM)
+import Language.PureScript.Pretty.Values (prettyPrintDeclaration)
+import Text.PrettyPrint.Boxes (render)
 
 -- |
 -- Replace all top level type declarations in a module with type annotations
@@ -33,7 +35,7 @@ desugarTypeDeclarationsModule (Module ss coms name ds exps) =
   desugarTypeDeclarations :: [Declaration] -> m [Declaration]
   desugarTypeDeclarations (PositionedDeclaration pos com d : rest) = trace "desugaring PositionedDeclaration" $ do
     (d' : rest') <- rethrowWithPosition pos $ desugarTypeDeclarations (d : rest)
-    traceM $ "\ndesugared:" ++ show (d' : rest')
+    --traceM $ "\ndesugared: " ++ render (prettyPrintDeclaration 10 d)
     return (PositionedDeclaration pos com d' : rest')
   desugarTypeDeclarations (TypeDeclaration name' ty : d : rest) = do
     (_, nameKind, val) <- fromValueDeclaration d

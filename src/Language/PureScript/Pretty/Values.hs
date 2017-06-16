@@ -5,6 +5,7 @@ module Language.PureScript.Pretty.Values
   ( prettyPrintValue
   , prettyPrintBinder
   , prettyPrintBinderAtom
+  , prettyPrintDeclaration
   ) where
 
 import Prelude.Compat

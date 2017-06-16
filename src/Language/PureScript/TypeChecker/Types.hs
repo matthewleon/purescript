@@ -81,7 +81,7 @@ typesOf
   -> ModuleName
   -> [(Ident, Expr)]
   -> m [(Ident, (Expr, Type))]
-typesOf bindingGroupType moduleName vals = trace "\nrunning typesOf" $ traceShow bindingGroupType $ traceShow vals $ withFreshSubstitution $ do
+typesOf bindingGroupType moduleName vals = trace "\nrunning typesOf" $ traceShow bindingGroupType $ withFreshSubstitution $ do
     (tys, wInfer) <- capturingSubstitution tidyUp $ do
       (SplitBindingGroup untyped typed dict, w) <- withoutWarnings $ typeDictionaryForBindingGroup (Just moduleName) vals
       ds1 <- parU typed $ \e -> withoutWarnings $ checkTypedBindingGroupElement moduleName e dict
@@ -90,6 +90,7 @@ typesOf bindingGroupType moduleName vals = trace "\nrunning typesOf" $ traceShow
 
     inferred <- forM tys $ \(shouldGeneralize, ((ident, (val, ty)), _)) -> do
       -- Replace type class dictionary placeholders with actual dictionaries
+      -- TODO: these dictionaries should maybe somehow have their types flagged?
       (val', unsolved) <- replaceTypeClassDictionaries shouldGeneralize val
       -- Generalize and constrain the type
       currentSubst <- gets checkSubstitution
@@ -428,7 +429,7 @@ inferLetBinding
   -> (Expr -> m Expr)
   -> m ([Declaration], Expr)
 inferLetBinding seen ds v f = 
-  trace ("inferring let binding: \n" ++ show seen ++ "\n" ++ show ds ++ render (prettyPrintValue 10 v)) $
+  trace ("inferring let binding: \n" ++ render (prettyPrintValue 10 v)) $
   inferLetBinding' seen ds v f
 
 inferLetBinding'
@@ -624,7 +625,7 @@ check'
   => Expr
   -> Type
   -> m Expr
-check' val t = trace ("checking type: " ++ prettyPrintType t ++ render (prettyPrintValue 10 val) ++ show val) $ check'' val t
+check' val t = trace ("checking type: " ++ prettyPrintType t ++ render (prettyPrintValue 10 val)) $ check'' val t
 
 check''
   :: forall m
@@ -698,11 +699,17 @@ check'' (DeferredDictionary className tys) ty = do
              (TypeClassDictionary (Constraint className tys Nothing) dicts hints)
              ty
 check'' (TypedValue checkType val ty1) ty2 = do
+  traceM "!!! TypedValue check !!!"
+  traceM $ "ty1: " ++ prettyPrintType ty1
+  traceM $ "ty2: " ++ prettyPrintType ty2
   kind <- kindOf ty1
   checkTypeKind ty1 kind
   ty1' <- introduceSkolemScope <=< replaceAllTypeSynonyms <=< replaceTypeWildcards $ ty1
   ty2' <- introduceSkolemScope <=< replaceAllTypeSynonyms <=< replaceTypeWildcards $ ty2
+  traceM $ "ty1': " ++ prettyPrintType ty1'
+  traceM $ "ty2': " ++ prettyPrintType ty2'
   elaborate <- subsumes ty1' ty2'
+  traceM "passed subsumption check"
   val' <- if checkType
             then check val ty1'
             else pure val
@@ -716,18 +723,15 @@ check'' (IfThenElse cond th el) ty = do
   th' <- check th ty
   el' <- check el ty
   return $ TypedValue True (IfThenElse cond' th' el') ty
-check'' e@(Literal (ObjectLiteral ps)) t@(TypeApp obj row) | obj == tyRecord = trace ("checking Literal\ntype: " ++ show t ++ "\n" ++ render (prettyPrintValue 10 e)) $ do -- add pretty print of e
+check'' e@(Literal (ObjectLiteral ps)) t@(TypeApp obj row) | obj == tyRecord = trace ("checking Literal\ntype: " ++ prettyPrintType t ++ "obj: " ++ prettyPrintType obj ++ "row: " ++ prettyPrintType row) $ do -- add pretty print of e
   ensureNoDuplicateProperties ps
   ps' <- checkProperties e ps row False
   return $ TypedValue True (Literal (ObjectLiteral ps')) t
 check'' (TypeClassDictionaryConstructorApp name ps) t = do
-  {-
-  traceM "\ncheck' TypeClassDictionaryConstructorApp"
-  traceM $ "\nt: " ++ show t
-  traceM $ "\nps: " ++ show ps
-  traceM $ "\nps: pretty " ++ render (prettyPrintValue 10 ps)
-  -}
-  -- GUESS: this is where shit gets bad... Maybe should recurse but doesn't?
+  traceM "\ncheck' TypeClassDictionaryConstructorApp: "
+  traceM $ "\nps: " ++ render (prettyPrintValue 10 ps)
+  traceM $ "\nt: " ++ prettyPrintType t
+  -- TODO: we need to check something regarding the type here
   ps' <- check' ps t
   --traceM "checked ps"
   return $ TypedValue True (TypeClassDictionaryConstructorApp name ps') t
@@ -794,23 +798,32 @@ checkProperties expr ps row lax = let (ts, r') = rowToList row in go ps ts r' wh
   go ((p,v):ps') ts r =
     case lookup (Label p) ts of
       Nothing -> do
+        traceM $ "inferring object property type: "
         v'@(TypedValue _ _ ty) <- infer v
+	traceM $ prettyPrintType ty
         rest <- freshType
         unifyTypes r (RCons (Label p) ty rest)
         ps'' <- go ps' ts rest
         return $ (p, v') : ps''
       Just ty -> do
-        traceM $ "checking object property: " ++ prettyPrintType ty
-	traceM $ "property: " ++ render (prettyPrintValue 10 v)
-	traceM "HEY: we should invoke withScopedTypeVars here!!!"
-        {- BEGIN crazy experiment -}
-	Just moduleName <- checkCurrentModule <$> get
-        (kind, args) <- kindOfWithScopedVars ty
-	checkTypeKind ty kind
-        {- END I think -}
-        v' <- withScopedTypeVars moduleName args (check v ty)
+        v' <- case isTypedProperty v of
+	        (Just ty') -> do
+                  Just moduleName <- checkCurrentModule <$> get
+                  (kind, args) <- kindOfWithScopedVars ty'
+                  checkTypeKind ty' kind
+                  withScopedTypeVars moduleName args (check v ty)
+	        Nothing -> check v ty
         ps'' <- go ps' (delete (Label p, ty) ts) r
         return $ (p, v') : ps''
+
+	where
+	  -- | Desugared typeclass instances with signatures will result
+	  --   in typed properties.
+	  isTypedProperty :: Expr -> Maybe Type
+	  isTypedProperty (PositionedValue _ _ pv) = isTypedProperty pv
+	  isTypedProperty (TypedValue True _ t) = Just t
+	  isTypedProperty _                     = Nothing
+
   go _ _ _ = throwError . errorMessage $ ExprDoesNotHaveType expr (TypeApp tyRecord row)
 
 -- | Check the type of a function application, rethrowing errors to provide a better error message.

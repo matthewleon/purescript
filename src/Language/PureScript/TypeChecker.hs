@@ -273,7 +273,7 @@ typeCheckAll moduleName _ = traverse go
     return $ TypeSynonymDeclaration name args ty
   go TypeDeclaration{} =
     internalError "Type declarations should have been removed before typeCheckAlld"
-  go (ValueDeclaration name nameKind [] [MkUnguarded val]) = trace ("typeCheck ValueDeclaration " ++ show name ++ ": " ++ show val) $ trace (render (prettyPrintValue 10 val)) $ do
+  go (ValueDeclaration name nameKind [] [MkUnguarded val]) = trace ("typeCheck ValueDeclaration " ++ show name) $ trace (render (prettyPrintValue 10 val)) $ do
     env <- getEnv
     warnAndRethrow (addHint (ErrorInValueDeclaration name)) $ do
       val' <- checkExhaustiveExpr env moduleName val
