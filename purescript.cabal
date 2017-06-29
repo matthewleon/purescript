@@ -634,6 +634,7 @@ extra-source-files:
       README.md
       stack.yaml
       tests/support/bower.json
+      tests/support/package-lock.json
       tests/support/package.json
       tests/support/prelude-resolutions.json
       tests/support/psci/Sample.purs

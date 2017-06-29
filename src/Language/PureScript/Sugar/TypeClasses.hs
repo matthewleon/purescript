@@ -31,6 +31,10 @@ import           Language.PureScript.Sugar.CaseDeclarations
 import           Language.PureScript.Types
 import           Language.PureScript.TypeClassDictionaries (superclassName)
 
+import Debug.Trace (traceM)
+import Text.PrettyPrint.Boxes (render)
+import Language.PureScript.Pretty.Values (prettyPrintValue)
+
 type MemberMap = M.Map (ModuleName, ProperName 'ClassName) TypeClassData
 
 type Desugar = StateT MemberMap
@@ -286,7 +290,10 @@ typeInstanceDictionaryDeclaration sa name mn deps className tys decls =
       let memberTypes = map (second (replaceAllTypeVars (zip (map fst typeClassArguments) tys))) typeClassMembers
 
       -- Create values for the type instance members
+      -- TODO: these values are created. Fine. We need to bind them into Lets.
+      --members :: [String, Expr]
       members <- zip (map typeClassMemberName decls) <$> traverse (memberToValue memberTypes) decls
+      --traceM $ "generated typeclass instance members: " ++ show members
 
       -- Create the type of the dictionary
       -- The type is a record type, but depending on type instance dependencies, may be constrained.
@@ -298,10 +305,21 @@ typeInstanceDictionaryDeclaration sa name mn deps className tys decls =
             ]
 
       let props = Literal $ ObjectLiteral $ map (first mkString) (members ++ superclasses)
+          -- new shit
+	  memberNames :: [Text]
+	  memberNames = map fst (members ++ superclasses)
+          valProps = Literal $ ObjectLiteral $ map (\name -> (mkString name, Var (Qualified Nothing (Ident name)))) memberNames
+	  --letValProps = Let (map (\(memberName, val) -> ValueDeclaration sa (Ident memberName) Private [] [MkUnguarded val]) members) valProps
+	  letValProps = Let (map (\(memberName, val) -> ValueDeclaration sa (Ident memberName) Private [] [MkUnguarded val]) members) (TypeClassDictionaryConstructorApp className valProps)
+	  -- /new shit
           dictTy = foldl TypeApp (TypeConstructor (fmap coerceProperName className)) tys
           constrainedTy = quantify (foldr ConstrainedType dictTy deps)
           dict = TypeClassDictionaryConstructorApp className props
-          result = ValueDeclaration sa name Private [] [MkUnguarded (TypedValue True dict constrainedTy)]
+          --result = ValueDeclaration sa name Private [] [MkUnguarded (TypedValue True dict constrainedTy)]
+          result = ValueDeclaration sa name Private [] [MkUnguarded (TypedValue True letValProps constrainedTy)]
+      traceM $ "generated props: " ++ show props
+      traceM $ "valProps: " ++ render (prettyPrintValue 10 valProps)
+      traceM $ "letValProps: " ++ render (prettyPrintValue 10 letValProps)
       return result
 
   where
@@ -314,6 +332,8 @@ typeInstanceDictionaryDeclaration sa name mn deps className tys decls =
   memberToValue :: [(Ident, Type)] -> Declaration -> Desugar m Expr
   memberToValue tys' (ValueDeclaration _ ident _ [] [MkUnguarded val]) = do
     _ <- maybe (throwError . errorMessage $ ExtraneousClassMember ident className) return $ lookup ident tys'
+    traceM $ "generated instance member: " ++ show val
+    traceM $ "generated instance member (pretty): " ++ render (prettyPrintValue 10 val)
     return val
   memberToValue _ _ = internalError "Invalid declaration in type instance definition"
 
