@@ -3,15 +3,21 @@ module Language.PureScript.CoreImp.Optimizer.TCO (tco) where
 
 import Prelude.Compat
 
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Data.Monoid ((<>))
 import Language.PureScript.CoreImp.AST
 import Language.PureScript.AST.SourcePos (SourceSpan)
 import Safe (headDef, tailSafe)
 
+import Language.PureScript.CodeGen.JS.Printer (prettyPrintJS)
+import Debug.Trace
+
+traceAST :: AST -> a -> a
+traceAST ast = trace (unpack $ prettyPrintJS [ast])
+
 -- | Eliminate tail calls
 tco :: AST -> AST
-tco = everywhere convert where
+tco = trace "TCO TIME! " $ everywhere convert where
   tcoVar :: Text -> Text
   tcoVar arg = "$tco_var_" <> arg
 
@@ -49,15 +55,31 @@ tco = everywhere convert where
   collectAllFunctionArgs allArgs f body = (allArgs, body, f)
 
   isTailRecursive :: Text -> AST -> Bool
-  isTailRecursive ident js = countSelfReferences js > 0 && allInTailPosition js where
+  isTailRecursive ident js =
+    trace (unpack ident)
+    $ traceAST js
+    $ trace "isTailRecursive?" $ traceShow out
+    $ trace "countSelfReferences" $ traceShow (countSelfReferences js)
+    $ trace "allInTailPosition" $ traceShow (allInTailPosition js)
+    $ out
+    where
+    out = countSelfReferences js > 0 && allInTailPosition js
     countSelfReferences = everything (+) match where
       match :: AST -> Int
       match (Var _ ident') | ident == ident' = 1
       match _ = 0
 
-    allInTailPosition (Return _ expr)
-      | isSelfCall ident expr = countSelfReferences expr == 1
-      | otherwise = countSelfReferences expr == 0
+    allInTailPosition r@(Return _ expr)
+      | isSelfCall ident expr =
+        trace "testing allInTailPosition Return isSelfCall"
+        $ traceAST r
+        $ traceShow (countSelfReferences expr)
+        $ countSelfReferences expr == 1
+      | otherwise =
+        trace "testing allInTailPosition Return notIsSelfCall"
+        $ traceAST r
+        $ traceShow (countSelfReferences expr)
+        $ countSelfReferences expr == 0
     allInTailPosition (While _ js1 body)
       = countSelfReferences js1 == 0 && allInTailPosition body
     allInTailPosition (For _ _ js1 js2 body)
@@ -73,7 +95,12 @@ tco = everywhere convert where
     allInTailPosition (ReturnNoResult _)
       = True
     allInTailPosition (VariableIntroduction _ _ js1)
-      = all ((== 0) . countSelfReferences) js1
+      = trace "testing tail position for variable introduction:"
+      -- $ traceShow js1
+      -- $ traceShow (all ((== 0) . countSelfReferences) js1)
+      -- $ trace "selfReferences"
+      -- $ traceShow (countSelfReferences <$> js1)
+      $ all ((== 0) . countSelfReferences) js1
     allInTailPosition (Assignment _ _ js1)
       = countSelfReferences js1 == 0
     allInTailPosition (Comment _ _ js1)
@@ -125,6 +152,12 @@ tco = everywhere convert where
     collectArgs acc _ = acc
 
   isSelfCall :: Text -> AST -> Bool
-  isSelfCall ident (App _ (Var _ ident') _) = ident == ident'
-  isSelfCall ident (App _ fn _) = isSelfCall ident fn
-  isSelfCall _ _ = False
+  isSelfCall t a = trace "testing isSelfCall"
+                 $ trace (unpack t)
+                 $ traceAST a
+                 $ isSelfCall' t a
+    where
+    isSelfCall' :: Text -> AST -> Bool
+    isSelfCall' ident (App _ (Var _ ident') _) = ident == ident'
+    isSelfCall' ident (App _ fn _) = isSelfCall ident fn
+    isSelfCall'  _ _ = False
