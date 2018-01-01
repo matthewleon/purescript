@@ -293,11 +293,9 @@ inlineUnsafeCoerce = everywhereTopDown convert where
 
 inlineUnsafePartial :: AST -> AST
 inlineUnsafePartial = everywhereTopDown convert where
-  convert (App ss (Indexer _ (StringLiteral _ unsafePartial) (Var _ partialUnsafe)) [ comp ])
+  convert (App _ (Indexer _ (StringLiteral _ unsafePartial) (Var _ partialUnsafe)) [ comp ])
     | unsafePartial == C.unsafePartial && partialUnsafe == C.partialUnsafe
-    -- Apply to undefined here, the application should be optimized away
-    -- if it is safe to do so
-    = App ss comp [ Var ss C.undefined ]
+    = comp
   convert other = other
 
 semiringNumber :: forall a b. (IsString a, IsString b) => (a, b)

@@ -60,9 +60,15 @@ import Language.PureScript.TypeChecker.Subsumption
 import Language.PureScript.TypeChecker.Synonyms
 import Language.PureScript.TypeChecker.TypeSearch
 import Language.PureScript.TypeChecker.Unify
+import Language.PureScript.TypeClassDictionaries (TypeClassDictionaryInScope(..))
 import Language.PureScript.Types
 import Language.PureScript.Label (Label(..))
 import Language.PureScript.PSString (PSString)
+
+import Text.PrettyPrint.Boxes (render)
+import Language.PureScript.Pretty.Values (prettyPrintValue)
+import Language.PureScript.Pretty.Types (prettyPrintType)
+import Debug.Trace
 
 data BindingGroupType
   = RecursiveBindingGroup
@@ -289,7 +295,8 @@ instantiatePolyTypeWithUnknowns val (ForAll ident ty _) = do
 instantiatePolyTypeWithUnknowns val (ConstrainedType con ty) = do
    dicts <- getTypeClassDictionaries
    hints <- getHints
-   instantiatePolyTypeWithUnknowns (App val (TypeClassDictionary con dicts hints)) ty
+   let instantiation = App val (TypeClassDictionary con dicts hints)
+   instantiatePolyTypeWithUnknowns instantiation ty
 instantiatePolyTypeWithUnknowns val ty = return (val, ty)
 
 -- | Infer a type for a value, rethrowing any error to provide a more useful error message
@@ -622,10 +629,31 @@ check' val (ForAll ident ty _) = do
   val' <- check skVal sk
   return $ TypedValue True val' (ForAll ident ty (Just scope))
 check' val t@(ConstrainedType con@(Constraint (Qualified _ (ProperName className)) _ _) ty) = do
+  traceM "checking ConstrainedType: "
+  traceM $ render $ prettyPrintValue 2 val
+  traceM $ prettyPrintType t
   dictName <- freshIdent ("dict" <> className)
   dicts <- newDictionaries [] (Qualified Nothing dictName) con
   val' <- withBindingGroupVisible $ withTypeClassDictionaries dicts $ check val ty
-  return $ TypedValue True (Abs (VarBinder dictName) val') t
+  traceM "dicts: "
+  traceShowM dicts
+  -- TODO: this is probably where we check for the "emptiness" of the dictionary
+  let ret = TypedValue True (Abs (VarBinder dictName) val') t 
+  traceM "ret:"
+  traceM $ render $ prettyPrintValue 5 ret
+  let strippedVal = TypedValue True val ty
+  traceM "stripped:"
+  traceM $ render $ prettyPrintValue 5 strippedVal
+  --traceM "strippedVal"
+  --traceShowM strippedVal
+  traceM ""
+  -- need to check for NO SUBGOALS... How to do it?
+  allDictionaryMembers <- concat <$> traverse dictionaryMembers dicts
+  return $ case dicts of
+    [_] | null allDictionaryMembers -> trace "optimization criteria met" $ strippedVal
+    _ -> ret
+  --return $ if null allDictionaryMembers then strippedVal else ret
+  --return $ if null allDictionaryMembers then strippedVal else ret
 check' val u@(TUnknown _) = do
   val'@(TypedValue _ _ ty) <- infer val
   -- Don't unify an unknown with an inferred polytype
@@ -810,6 +838,13 @@ checkFunctionApplication'
   -> Expr
   -> m (Type, Expr)
 checkFunctionApplication' fn (TypeApp (TypeApp tyFunction' argTy) retTy) arg = do
+{-
+  traceM "checking TypeApp function application:"
+  traceM $ render $ prettyPrintValue 2 fn
+  traceM $ prettyPrintType t
+  traceM $ render $ prettyPrintValue 2 arg
+  traceM ""
+-}
   unifyTypes tyFunction' tyFunction
   arg' <- check arg argTy
   return (retTy, App fn arg')
@@ -821,10 +856,38 @@ checkFunctionApplication' fn (KindedType ty _) arg =
 checkFunctionApplication' fn (ConstrainedType con fnTy) arg = do
   dicts <- getTypeClassDictionaries
   hints <- getHints
+{-
+  traceM "checking ConstrainedType function application:"
+  traceM "fn"
+  traceM $ render $ prettyPrintValue 2 fn
+  traceM "t"
+  traceM $ prettyPrintType t
+  traceM "con"
+  traceShowM con
+  traceM "fnTy"
+  traceM $ prettyPrintType fnTy
+  traceM "arg"
+  traceM $ render $ prettyPrintValue 2 arg
+  traceM ""
+-}
   checkFunctionApplication' (App fn (TypeClassDictionary con dicts hints)) fnTy arg
-checkFunctionApplication' fn fnTy dict@TypeClassDictionary{} =
+checkFunctionApplication' fn fnTy dict@TypeClassDictionary{} = do
+{-
+  traceM "checking function application with tc dict arg"
+  traceM $ render $ prettyPrintValue 2 fn
+  traceM $ prettyPrintType fnTy
+  traceM $ render $ prettyPrintValue 2 dict
+  traceM ""
+-}
   return (fnTy, App fn dict)
 checkFunctionApplication' fn u arg = do
+{-
+  traceM "checking other function application"
+  traceM $ render $ prettyPrintValue 2 fn
+  traceM $ prettyPrintType u
+  traceM $ render $ prettyPrintValue 2 arg
+  traceM ""
+-}
   arg' <- do
     TypedValue _ arg' t <- infer arg
     (arg'', t') <- instantiatePolyTypeWithUnknowns arg' t
@@ -843,3 +906,13 @@ ensureNoDuplicateProperties ps =
   case ls \\ ordNub ls of
     l : _ -> throwError . errorMessage $ DuplicateLabel (Label l) Nothing
     _ -> return ()
+
+-- | Get members for a typeclass dictionary.
+dictionaryMembers
+  :: MonadState CheckState m
+  => TypeClassDictionaryInScope v
+  -> m [(Ident, Type)]
+dictionaryMembers dict = do
+    tcs <- gets (typeClasses . checkEnv)
+    let tcd = fromMaybe (internalError "dictionaryMembers: type class lookup failed") $ M.lookup (tcdClassName dict) tcs
+    return (typeClassMembers tcd)
