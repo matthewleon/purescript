@@ -18,7 +18,7 @@ import qualified Language.PureScript as P
 --
 convertSingleModule :: P.Module -> Module
 convertSingleModule m@(P.Module _ coms moduleName  _ _) =
-  Module moduleName comments (declarations m) []
+  Module moduleName comments [] (declarations m) []
   where
   comments = convertComments coms
   declarations =

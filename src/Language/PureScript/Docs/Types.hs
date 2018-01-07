@@ -115,6 +115,8 @@ parseTime =
 data Module = Module
   { modName         :: P.ModuleName
   , modComments     :: Maybe Text
+  , modSections     :: [(Text, [Declaration])]
+  -- Declarations preceding any labeled section (there maybe none)
   , modDeclarations :: [Declaration]
   -- Re-exported values from other modules
   , modReExports    :: [(InPackage P.ModuleName, [Declaration])]
@@ -570,8 +572,14 @@ asModule :: Parse PackageError Module
 asModule =
   Module <$> key "name" (P.moduleNameFromString <$> asText)
          <*> key "comments" (perhaps asText)
+         <*> key "sections" (eachInArray asSection)
          <*> key "declarations" (eachInArray asDeclaration)
          <*> key "reExports" (eachInArray asReExport)
+
+asSection :: Parse PackageError (Text, [Declaration])
+asSection =
+  (,) <$> key "section" asText
+      <*> key "declarations" (eachInArray asDeclaration)
 
 asDeclaration :: Parse PackageError Declaration
 asDeclaration =
@@ -780,13 +788,17 @@ instance A.ToJSON Module where
   toJSON Module{..} =
     A.object [ "name"         .= P.runModuleName modName
              , "comments"     .= modComments
+             , "sections"     .= map sectionToObj modSections
              , "declarations" .= modDeclarations
-             , "reExports"    .= map toObj modReExports
+             , "reExports"    .= map reExportToObj modReExports
              ]
     where
-    toObj (mn, decls) = A.object [ "moduleName" .= mn
-                                 , "declarations" .= decls
-                                 ]
+    sectionToObj (name, decls) = A.object [ "section" .= name
+                                          , "declarations" .= decls
+                                          ]
+    reExportToObj (mn, decls) = A.object [ "moduleName" .= mn
+                                         , "declarations" .= decls
+                                         ]
 
 instance A.ToJSON Declaration where
   toJSON Declaration{..} =
