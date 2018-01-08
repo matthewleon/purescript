@@ -298,12 +298,33 @@ parseModuleDeclaration = do
   reserved "module"
   indented
   name <- moduleName
-  mexports <- P.optionMaybe . parens $ commaSep1 parseDeclarationRef
-  let exports = case mexports of
-                  Nothing   -> NoExplicitExports
-                  Just exps -> ExplicitExports exps [] 
+  exports <- parseExports
   reserved "where"
   pure (name, exports)
+  where
+  parseExports :: TokenParser ModuleExports
+  parseExports = do
+    mexports <- P.optionMaybe . parens . commaSep1 $ do
+                    beforeComments <- readComments
+                    declarationRef <- parseDeclarationRef
+                    afterComments <- readComments
+                    return (beforeComments, declarationRef, afterComments)
+    return $ case mexports of
+               Nothing   -> NoExplicitExports
+               Just exps -> uncurry ExplicitExports
+                            $ foldr addExport ([], []) exps
+    where
+    addExport (beforeComment:_, declarationRef, afterComment:_)
+              (unsectioned, sections)
+      = ([], (beforeComment, [declarationRef]):(afterComment, unsectioned):sections)
+    addExport (_, declarationRef, afterComment:_)
+              (unsectioned, sections)
+      = ([declarationRef], (afterComment, unsectioned):sections)
+    addExport (beforeComment:_, declarationRef, _)
+              (unsectioned, sections)
+      = ([], (beforeComment, declarationRef:unsectioned):sections)
+    addExport (_, declarationRef, _) (unsectioned, sections)
+      = (declarationRef:unsectioned, sections)
 
 -- | Parse a module header and a collection of declarations
 parseModule :: TokenParser Module
