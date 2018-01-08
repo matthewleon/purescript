@@ -426,18 +426,19 @@ typeCheckModule
    . (MonadSupply m, MonadState CheckState m, MonadError MultipleErrors m, MonadWriter MultipleErrors m)
   => Module
   -> m Module
-typeCheckModule (Module _ _ _ _ Nothing) =
+typeCheckModule (Module _ _ _ _ NoExplicitExports) =
   internalError "exports should have been elaborated before typeCheckModule"
-typeCheckModule (Module ss coms mn decls (Just exps)) =
+typeCheckModule (Module ss coms mn decls exps) =
   warnAndRethrow (addHint (ErrorInModule mn)) $ do
     modify (\s -> s { checkCurrentModule = Just mn })
-    decls' <- typeCheckAll mn exps decls
-    for_ exps $ \e -> do
+    decls' <- typeCheckAll mn allExps decls
+    for_ allExps $ \e -> do
       checkTypesAreExported e
       checkClassMembersAreExported e
       checkClassesAreExported e
-    return $ Module ss coms mn decls' (Just exps)
+    return $ Module ss coms mn decls' exps
   where
+  allExps = allExplicitExports exps
 
   checkMemberExport :: (Type -> [DeclarationRef]) -> DeclarationRef -> m ()
   checkMemberExport extract dr@(TypeRef _ name dctors) = do
@@ -462,7 +463,7 @@ typeCheckModule (Module ss coms mn decls (Just exps)) =
     [] -> return ()
     hidden -> throwError . errorMessage' (declRefSourceSpan dr) $ TransitiveExportError dr (nubBy nubEq hidden)
     where
-    exported e = any (exports e) exps
+    exported e = any (exports e) allExps
     exports (TypeRef _ pn1 _) (TypeRef _ pn2 _) = pn1 == pn2
     exports (ValueRef _ id1) (ValueRef _ id2) = id1 == id2
     exports (TypeClassRef _ pn1) (TypeClassRef _ pn2) = pn1 == pn2
@@ -502,7 +503,7 @@ typeCheckModule (Module ss coms mn decls (Just exps)) =
   checkClassMembersAreExported :: DeclarationRef -> m ()
   checkClassMembersAreExported dr@(TypeClassRef ss' name) = do
     let members = ValueRef ss' `map` head (mapMaybe findClassMembers decls)
-    let missingMembers = members \\ exps
+    let missingMembers = members \\ allExps
     unless (null missingMembers) . throwError . errorMessage' ss' $ TransitiveExportError dr members
     where
     findClassMembers :: Declaration -> Maybe [Ident]

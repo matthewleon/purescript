@@ -37,14 +37,14 @@ exportedDeclarations (Module _ _ mn decls exps) = go decls
         >>> filter (isExported exps)
         >>> map (filterDataConstructors exps)
         >>> filterInstances mn exps
-        >>> maybe id reorder exps
+        >>> reorder exps
 
 -- |
 -- Filter out all data constructors from a declaration which are not exported.
 -- If the supplied declaration is not a data declaration, this function returns
 -- it unchanged.
 --
-filterDataConstructors :: Maybe [DeclarationRef] -> Declaration -> Declaration
+filterDataConstructors :: ModuleExports -> Declaration -> Declaration
 filterDataConstructors exps (DataDeclaration sa dType tyName tyArgs dctors) =
   DataDeclaration sa dType tyName tyArgs $
     filter (isDctorExported tyName exps . fst) dctors
@@ -61,13 +61,14 @@ filterDataConstructors _ other = other
 --
 filterInstances
   :: ModuleName
-  -> Maybe [DeclarationRef]
+  -> ModuleExports
   -> [Declaration]
   -> [Declaration]
-filterInstances _ Nothing = id
-filterInstances mn (Just exps) =
-  let refs = Left `map` mapMaybe typeClassName exps
-          ++ Right `map` mapMaybe typeName exps
+filterInstances _ NoExplicitExports = id
+filterInstances mn exps =
+  let allExps = allExplicitExports exps
+      refs = Left `map` mapMaybe typeClassName allExps
+          ++ Right `map` mapMaybe typeName allExps
   in filter (all (visibleOutside refs) . typeInstanceConstituents)
   where
   -- Given a Qualified ProperName, and a list of all exported types and type
@@ -123,10 +124,10 @@ typeInstanceConstituents _ = []
 -- non-exported types, or non-exported data constructors. Therefore, you should
 -- prefer 'exportedDeclarations' to this function, where possible.
 --
-isExported :: Maybe [DeclarationRef] -> Declaration -> Bool
-isExported Nothing _ = True
+isExported :: ModuleExports -> Declaration -> Bool
+isExported NoExplicitExports _ = True
 isExported _ TypeInstanceDeclaration{} = True
-isExported (Just exps) decl = any matches exps
+isExported exps decl = any matches $ allExplicitExports exps
   where
   matches declRef = declName decl == Just (declRefName declRef)
 
@@ -134,9 +135,9 @@ isExported (Just exps) decl = any matches exps
 -- Test if a data constructor for a given type is exported, given a module's
 -- export list. Prefer 'exportedDeclarations' to this function, where possible.
 --
-isDctorExported :: ProperName 'TypeName -> Maybe [DeclarationRef] -> ProperName 'ConstructorName -> Bool
-isDctorExported _ Nothing _ = True
-isDctorExported ident (Just exps) ctor = test `any` exps
+isDctorExported :: ProperName 'TypeName -> ModuleExports -> ProperName 'ConstructorName -> Bool
+isDctorExported _ NoExplicitExports _ = True
+isDctorExported ident exps ctor = test `any` (allExplicitExports exps)
   where
   test (TypeRef _ ident' Nothing) = ident == ident'
   test (TypeRef _ ident' (Just ctors)) = ident == ident' && ctor `elem` ctors
@@ -146,10 +147,12 @@ isDctorExported ident (Just exps) ctor = test `any` exps
 -- Reorder declarations based on the order they appear in the given export
 -- list.
 --
-reorder :: [DeclarationRef] -> [Declaration] -> [Declaration]
-reorder refs =
+reorder :: ModuleExports -> [Declaration] -> [Declaration]
+reorder NoExplicitExports = id
+reorder exps =
   sortBy (compare `on` refIndex)
   where
+  refs = allExplicitExports exps
   refIndices =
     M.fromList $ zip (map declRefName refs) [(0::Int)..]
   refIndex decl =

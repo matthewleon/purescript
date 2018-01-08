@@ -56,9 +56,9 @@ lintImports
   -> Env
   -> UsedImports
   -> m ()
-lintImports (Module _ _ _ _ Nothing) _ _ =
+lintImports (Module _ _ _ _ NoExplicitExports) _ _ =
   internalError "lintImports needs desugared exports"
-lintImports (Module _ _ mn mdecls (Just mexports)) env usedImps = do
+lintImports (Module _ _ mn mdecls exports) env usedImps = do
 
   -- TODO: this needs some work to be easier to understand
 
@@ -144,7 +144,7 @@ lintImports (Module _ _ mn mdecls (Just mexports)) env usedImps = do
   -- The list of modules that are being re-exported by the current module. Any
   -- module that appears in this list is always considered to be used.
   exportedModules :: [ModuleName]
-  exportedModules = ordNub $ mapMaybe extractModule mexports
+  exportedModules = ordNub $ mapMaybe extractModule $ allExplicitExports exports
     where
     extractModule (ModuleRef _ mne) = Just mne
     extractModule _ = Nothing

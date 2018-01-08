@@ -105,7 +105,10 @@ desugarImportsWithEnv externs modules = do
     members <- findExportable m
     let env' = M.insert mn (ss, nullImports, members) env
     (m', imps) <- resolveImports env' m
-    exps <- maybe (return members) (resolveExports env' ss mn imps members) refs
+    exps <- case refs of
+              NoExplicitExports -> return members
+              refs' -> resolveExports env' ss mn imps members
+                       $ allExplicitExports refs'
     return (m' : ms, M.insert mn (ss, imps, exps) env)
 
   renameInModule' :: Env -> Module -> m Module
@@ -128,14 +131,15 @@ desugarImportsWithEnv externs modules = do
 --
 elaborateExports :: Exports -> Module -> Module
 elaborateExports exps (Module ss coms mn decls refs) =
-  Module ss coms mn decls $ Just $ reorderExports decls refs
+  Module ss coms mn decls $ ExplicitExports (reorderExports decls refs
     $ elaboratedTypeRefs
     ++ go (TypeOpRef ss) exportedTypeOps
     ++ go (TypeClassRef ss) exportedTypeClasses
     ++ go (ValueRef ss) exportedValues
     ++ go (ValueOpRef ss) exportedValueOps
     ++ go (KindRef ss) exportedKinds
-    ++ maybe [] (filter isModuleRef) refs
+    ++ filter isModuleRef (allExplicitExports refs)
+    ) []
   where
 
   elaboratedTypeRefs :: [DeclarationRef]
@@ -154,12 +158,14 @@ elaborateExports exps (Module ss coms mn decls refs) =
 -- exports list, reorder the elaborated list so that it matches the original
 -- order. If there is no original exports list, reorder declarations based on
 -- their order in the source file.
-reorderExports :: [Declaration] -> Maybe [DeclarationRef] -> [DeclarationRef] -> [DeclarationRef]
+reorderExports :: [Declaration] -> ModuleExports -> [DeclarationRef] -> [DeclarationRef]
 reorderExports decls originalRefs =
   sortBy (compare `on` originalIndex)
   where
   names =
-    maybe (mapMaybe declName decls) (map declRefName) originalRefs
+    case originalRefs of
+      NoExplicitExports -> mapMaybe declName decls
+      exps              -> map declRefName $ allExplicitExports exps
   namesMap =
     M.fromList $ zip names [(0::Int)..]
   originalIndex ref =

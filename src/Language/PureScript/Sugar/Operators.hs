@@ -376,19 +376,20 @@ checkFixityExports
    . MonadError MultipleErrors m
   => Module
   -> m Module
-checkFixityExports (Module _ _ _ _ Nothing) =
+checkFixityExports (Module _ _ _ _ NoExplicitExports) =
   internalError "exports should have been elaborated before checkFixityExports"
-checkFixityExports m@(Module ss _ mn ds (Just exps)) =
+checkFixityExports m@(Module ss _ mn ds exps) =
   rethrow (addHint (ErrorInModule mn))
-    $ rethrowWithPosition ss (traverse_ checkRef exps)
+    $ rethrowWithPosition ss (traverse_ checkRef allExps)
     *> return m
   where
+  allExps = allExplicitExports exps
 
   checkRef :: DeclarationRef -> m ()
   checkRef dr@(ValueOpRef ss' op) =
     for_ (getValueOpAlias op) $ \case
       Left ident ->
-        unless (ValueRef ss' ident `elem` exps)
+        unless (ValueRef ss' ident `elem` allExps)
           . throwError . errorMessage' ss'
           $ TransitiveExportError dr [ValueRef ss' ident]
       Right ctor ->
@@ -428,7 +429,7 @@ checkFixityExports m@(Module ss _ mn ds (Just exps)) =
   anyTypeRef
     :: ((ProperName 'TypeName, Maybe [ProperName 'ConstructorName]) -> Bool)
     -> Bool
-  anyTypeRef f = any (maybe False f . getTypeRef) exps
+  anyTypeRef f = any (maybe False f . getTypeRef) allExps
 
 usingPredicate
   :: forall f a

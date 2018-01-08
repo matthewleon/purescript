@@ -183,7 +183,7 @@ sortExterns m ex = do
       pure $ mapMaybe getExtern (deps `inOrderOf` map P.getModuleName sorted)
   where
     mkShallowModule P.ExternsFile{..} =
-      P.Module (P.internalModuleSourceSpan "<rebuild>") [] efModuleName (map mkImport efImports) Nothing
+      P.Module (P.internalModuleSourceSpan "<rebuild>") [] efModuleName (map mkImport efImports) P.NoExplicitExports
     mkImport (P.ExternsImport mn it iq) =
       P.ImportDeclaration (P.internalModuleSourceSpan "<rebuild>", []) mn it iq
     getExtern mn = M.lookup mn ex
@@ -193,4 +193,4 @@ sortExterns m ex = do
 
 -- | Removes a modules export list.
 openModuleExports :: P.Module -> P.Module
-openModuleExports (P.Module ss cs mn decls _) = P.Module ss cs mn decls Nothing
+openModuleExports (P.Module ss cs mn decls _) = P.Module ss cs mn decls P.NoExplicitExports

@@ -167,12 +167,12 @@ applyExternsFileToEnvironment ExternsFile{..} = flip (foldl' applyDecl) efDeclar
 
 -- | Generate an externs file for all declarations in a module
 moduleToExternsFile :: Module -> Environment -> ExternsFile
-moduleToExternsFile (Module _ _ _ _ Nothing) _ = internalError "moduleToExternsFile: module exports were not elaborated"
-moduleToExternsFile (Module ss _ mn ds (Just exps)) env = ExternsFile{..}
+moduleToExternsFile (Module _ _ _ _ NoExplicitExports) _ = internalError "moduleToExternsFile: module exports were not elaborated"
+moduleToExternsFile (Module ss _ mn ds exps) env = ExternsFile{..}
   where
   efVersion       = T.pack (showVersion Paths.version)
   efModuleName    = mn
-  efExports       = exps
+  efExports       = allExplicitExports exps
   efImports       = mapMaybe importDecl ds
   efFixities      = mapMaybe fixityDecl ds
   efTypeFixities  = mapMaybe typeFixityDecl ds
@@ -181,12 +181,12 @@ moduleToExternsFile (Module ss _ mn ds (Just exps)) env = ExternsFile{..}
 
   fixityDecl :: Declaration -> Maybe ExternsFixity
   fixityDecl (ValueFixityDeclaration _ (Fixity assoc prec) name op) =
-    fmap (const (ExternsFixity assoc prec op name)) (find (findOp getValueOpRef op) exps)
+    fmap (const (ExternsFixity assoc prec op name)) (find (findOp getValueOpRef op) efExports)
   fixityDecl _ = Nothing
 
   typeFixityDecl :: Declaration -> Maybe ExternsTypeFixity
   typeFixityDecl (TypeFixityDeclaration _ (Fixity assoc prec) name op) =
-    fmap (const (ExternsTypeFixity assoc prec op name)) (find (findOp getTypeOpRef op) exps)
+    fmap (const (ExternsTypeFixity assoc prec op name)) (find (findOp getTypeOpRef op) efExports)
   typeFixityDecl _ = Nothing
 
   findOp :: (DeclarationRef -> Maybe (OpName a)) -> OpName a -> DeclarationRef -> Bool

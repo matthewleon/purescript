@@ -66,7 +66,7 @@ createTemporaryModule exec PSCiState{psciImportedModules = imports, psciLetBindi
     P.Module internalSpan
              [] moduleName
              ((importDecl `map` (effImport : supportImport : imports)) ++ lets ++ decls)
-             Nothing
+             P.NoExplicitExports
 
 
 -- |
@@ -78,7 +78,7 @@ createTemporaryModuleForKind PSCiState{psciImportedModules = imports, psciLetBin
     moduleName = P.ModuleName [P.ProperName "$PSCI"]
     itDecl = P.TypeSynonymDeclaration (internalSpan, []) (P.ProperName "IT") [] typ
   in
-    P.Module internalSpan [] moduleName ((importDecl `map` imports) ++ lets ++ [itDecl]) Nothing
+    P.Module internalSpan [] moduleName ((importDecl `map` imports) ++ lets ++ [itDecl]) P.NoExplicitExports
 
 -- |
 -- Makes a volatile module to execute the current imports.
@@ -88,7 +88,7 @@ createTemporaryModuleForImports PSCiState{psciImportedModules = imports} =
   let
     moduleName = P.ModuleName [P.ProperName "$PSCI"]
   in
-    P.Module internalSpan [] moduleName (importDecl `map` imports) Nothing
+    P.Module internalSpan [] moduleName (importDecl `map` imports) P.NoExplicitExports
 
 importDecl :: ImportedModule -> P.Declaration
 importDecl (mn, declType, asQ) = P.ImportDeclaration (internalSpan, []) mn declType asQ

@@ -185,7 +185,7 @@ getAllQualifications sho m (declName, decl) = do
   return $ fullyQualified : otherQuals
   where
   qualifyWith mMod = T.unpack (P.showQualified sho (P.Qualified mMod declName))
-  referencedBy refs = P.isExported (Just refs) decl
+  referencedBy refs = P.isExported (P.ExplicitExports refs []) decl
 
   qualificationsUsing (_, importType, asQ') =
     let q = qualifyWith asQ'

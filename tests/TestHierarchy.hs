@@ -32,7 +32,7 @@ main = testSpec "hierarchy" $ do
               []
               (P.ModuleName [P.ProperName "Main"])
               []
-              Nothing
+              P.NoExplicitExports
 
         let graph = typeClassGraph mainModule
 
@@ -60,7 +60,7 @@ main = testSpec "hierarchy" $ do
               []
               (P.ModuleName [P.ProperName "Main"])
               declarations
-              Nothing
+              P.NoExplicitExports
 
         let graph = typeClassGraph mainModule
 

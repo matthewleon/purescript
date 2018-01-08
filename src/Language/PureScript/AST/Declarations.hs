@@ -218,10 +218,9 @@ data ErrorMessage = ErrorMessage
 
 -- |
 -- A module declaration, consisting of comments about the module, a module name,
--- a list of declarations, and a list of the declarations that are
--- explicitly exported. If the export list is Nothing, everything is exported.
---
-data Module = Module SourceSpan [Comment] ModuleName [Declaration] (Maybe [DeclarationRef])
+-- a list of declarations, and the module's explicit exports.
+-- In the absence of explicit exports, all declarations are exported.
+data Module = Module SourceSpan [Comment] ModuleName [Declaration] ModuleExports
   deriving (Show)
 
 -- | Return a module's name.
@@ -231,6 +230,16 @@ getModuleName (Module _ _ name _ _) = name
 -- | Return a module's source span.
 getModuleSourceSpan :: Module -> SourceSpan
 getModuleSourceSpan (Module ss _ _ _ _) = ss
+
+data ModuleExports = NoExplicitExports
+                   | ExplicitExports [DeclarationRef] [(Comment, [DeclarationRef])]
+  deriving (Show)
+
+-- | Exported DeclarationRefs as a simple list, maintaining order.
+allExplicitExports :: ModuleExports -> [DeclarationRef]
+allExplicitExports NoExplicitExports = []
+allExplicitExports (ExplicitExports unsectioned sectioned) =
+  unsectioned ++ concatMap snd sectioned
 
 -- |
 -- Add an import declaration for a module if it does not already explicitly import it.

@@ -293,12 +293,15 @@ parseLocalDeclaration =
     ] P.<?> "local declaration"
 
 -- | Parse a module declaration and its export declarations
-parseModuleDeclaration :: TokenParser (ModuleName, Maybe [DeclarationRef])
+parseModuleDeclaration :: TokenParser (ModuleName, ModuleExports)
 parseModuleDeclaration = do
   reserved "module"
   indented
   name <- moduleName
-  exports <- P.optionMaybe . parens $ commaSep1 parseDeclarationRef
+  mexports <- P.optionMaybe . parens $ commaSep1 parseDeclarationRef
+  let exports = case mexports of
+                  Nothing   -> NoExplicitExports
+                  Just exps -> ExplicitExports exps [] 
   reserved "where"
   pure (name, exports)
 

@@ -63,10 +63,12 @@ desugarModule
   :: (MonadSupply m, MonadError MultipleErrors m)
   => Module
   -> Desugar m Module
-desugarModule (Module ss coms name decls (Just exps)) = do
-  (newExpss, declss) <- unzip <$> parU (sortBy classesFirst decls) (desugarDecl name exps)
-  return $ Module ss coms name (concat declss) $ Just (exps ++ catMaybes newExpss)
+desugarModule (Module ss coms name decls exps@(ExplicitExports unsectioned sectioned)) = do
+  (newExpss, declss) <- unzip <$> parU (sortBy classesFirst decls) (desugarDecl name allExps)
+  return $ Module ss coms name (concat declss) $ ExplicitExports (unsectioned ++ catMaybes newExpss) sectioned
   where
+  allExps = allExplicitExports exps
+
   classesFirst :: Declaration -> Declaration -> Ordering
   classesFirst d1 d2
     | isTypeClassDeclaration d1 && not (isTypeClassDeclaration d2) = LT

@@ -31,12 +31,12 @@ import qualified Language.PureScript.AST as A
 
 -- | Desugars a module from AST to CoreFn representation.
 moduleToCoreFn :: Environment -> A.Module -> Module Ann
-moduleToCoreFn _ (A.Module _ _ _ _ Nothing) =
+moduleToCoreFn _ (A.Module _ _ _ _ A.NoExplicitExports) =
   internalError "Module exports were not elaborated before moduleToCoreFn"
-moduleToCoreFn env (A.Module modSS coms mn decls (Just exps)) =
+moduleToCoreFn env (A.Module modSS coms mn decls exps) =
   let imports = mapMaybe importToCoreFn decls ++ fmap (ssAnn modSS,) (findQualModules decls)
       imports' = dedupeImports imports
-      exps' = ordNub $ concatMap exportToCoreFn exps
+      exps' = ordNub $ concatMap exportToCoreFn $ A.allExplicitExports exps
       externs = ordNub $ mapMaybe externToCoreFn decls
       decls' = concatMap declToCoreFn decls
   in Module coms mn (spanName modSS) imports' exps' externs decls'
