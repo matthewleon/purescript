@@ -64,7 +64,7 @@ spec = do
 
   let linksCtx = Docs.getLinksContext pkg
 
-  context "Language.PureScript.Docs" $
+  context "Language.PureScript.Docs" $ do
     forM_ testCases $ \(mnString, assertions) -> do
       let mn = P.moduleNameFromString mnString
           mdl = find ((==) mn . Docs.modName) pkgModules
@@ -76,6 +76,10 @@ spec = do
               expectationFailure ("module not found in docs: " ++ T.unpack mnString)
           Just mdl' ->
             toHspec linksCtx mdl' assertions
+    context ("Tag generation tests:") $
+      it "smells great" $ 
+        expectationFailure ("ANDROSS, I HAVE FAAAAAAAILED YOU!!!")
+      
 
   where
   toHspec :: Docs.LinksContext -> Docs.Module -> [DocsAssertion] -> Spec
@@ -130,6 +134,12 @@ data DocsAssertion
   -- | Assert that a given declaration comes before another in the output
   | ShouldComeBefore P.ModuleName Text Text
 
+data TagsAssertion
+  -- | Assert that a particular declaration is tagged
+  = ShouldBeTagged Text
+  -- | Assert that a particular declaration is not tagged
+  | ShouldNotBeTagged Text
+
 displayAssertion :: DocsAssertion -> Text
 displayAssertion = \case
   ShouldBeDocumented mn decl children ->
@@ -166,6 +176,13 @@ displayAssertion = \case
   ShouldComeBefore mn declA declB ->
     showQual mn declA <> " should come before " <> showQual mn declB <>
     " in the docs"
+
+displayTagsAssertion :: TagsAssertion -> Text
+displayTagsAssertion = \case
+  ShouldBeTagged mn decl ->
+    showQual mn decl <> " should be tagged"
+  ShouldNotBeTagged mn decl ->
+    showQual mn decl <> " should not be tagged"
 
 data DocsAssertionFailure
   -- | A declaration was not documented, but should have been
@@ -211,6 +228,12 @@ data DocsAssertionFailure
   -- | Declarations were in the wrong order
   | WrongOrder P.ModuleName Text Text
 
+data TagsAssertionFailure
+  -- | A declaration was not tagged, but should have been
+  = NotTagged P.ModuleName Text
+  -- | A declaration was tagged, but should not have been
+  | Tagged P.ModuleName Text
+
 displayAssertionFailure :: DocsAssertionFailure -> Text
 displayAssertionFailure = \case
   NotDocumented _ decl ->
@@ -251,9 +274,20 @@ displayAssertionFailure = \case
   WrongOrder _ before after ->
     "expected to see " <> before <> " before " <> after
 
+displayTagsAssertionFailure :: TagsAssertionFailure -> Text
+displayTagsAssertionFailure = \case
+  NotTagged _ decl ->
+    decl <> " was not tagged, but should have been"
+  Tagged _ decl ->
+    decl <> " was tagged, but should not have been"
+
 data DocsAssertionResult
   = Pass
   | Fail DocsAssertionFailure
+
+data TagsAssertionResult
+  = Pass
+  | Fail TagsAssertionFailure
 
 runAssertion :: DocsAssertion -> Docs.LinksContext -> Docs.Module -> DocsAssertionResult
 runAssertion assertion linksCtx Docs.Module{..} =
@@ -423,6 +457,9 @@ runAssertion assertion linksCtx Docs.Module{..} =
         _ ->
           Nothing
 
+-- TODO
+--runTagsAssertion :: TagsAssertion -> Docs.Module -> TagsAssertionResult
+
 checkConstrained :: P.Type -> Text -> Bool
 checkConstrained ty tyClass =
   case ty of
@@ -583,6 +620,15 @@ testCases =
 
   shouldBeOrdered mn declNames =
     zipWith (ShouldComeBefore mn) declNames (tail declNames)
+
+testTagsCases :: [(Text, [TagsAssertion])]
+testTagsCases =
+  [ ("Example",
+     [ ShouldBeTagged "one"
+     , ShouldNotBeTagged "two"
+     ]
+    )
+  ]
 
 showQual :: P.ModuleName -> Text -> Text
 showQual mn decl =
