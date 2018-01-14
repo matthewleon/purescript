@@ -17,14 +17,36 @@ import qualified Language.PureScript as P
 -- values will not appear in the result.
 --
 convertSingleModule :: P.Module -> Module
-convertSingleModule m@(P.Module _ coms moduleName  _ _) =
-  Module moduleName comments [] (declarations m) []
+convertSingleModule m@(P.Module _ coms moduleName  _ exports) =
+  case exports of
+    P.NoExplicitExports ->
+      Module moduleName comments (augment $ P.exportedDeclarations m) [] []
+    P.ExplicitExports _ sections ->
+      let (unsectioned', remaining') =
+            break (\decl -> P.declName decl ==
+                            (P.declRefName <$> firstRef sections))
+                  $ P.exportedDeclarations m
+          sectioned' = resection sections remaining' []
+          sectioned'' = bimap convSectionComment augment <$> sectioned'
+      in  Module moduleName comments (augment unsectioned') sectioned'' []
   where
   comments = convertComments coms
-  declarations =
-    P.exportedDeclarations
-    >>> mapMaybe (\d -> getDeclarationTitle d >>= convertDeclaration d)
-    >>> augmentDeclarations
+  augment = mapMaybe (\d -> getDeclarationTitle d >>= convertDeclaration d)
+            >>> augmentDeclarations
+  firstRef = headMay . concatMap snd
+
+  resection [] _ acc = reverse acc
+  resection ((c, _):refs') remaining acc =
+    case firstRef refs' of
+      Nothing -> resection refs' [] $ (c, remaining):acc
+      Just ref -> let (newSection, remaining') =
+                        break (\decl -> P.declName decl ==
+                                        Just (P.declRefName ref))
+                              remaining
+                  in  resection refs' remaining' $ (c, newSection):acc
+
+  convSectionComment (P.LineComment c) = T.dropWhile (== ' ') c
+  convSectionComment (P.BlockComment c) = T.dropWhile (== ' ') c
 
 -- | Different declarations we can augment
 data AugmentType

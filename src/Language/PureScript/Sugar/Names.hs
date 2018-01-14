@@ -9,7 +9,7 @@ module Language.PureScript.Sugar.Names
   ) where
 
 import Prelude.Compat
-import Protolude (ordNub, sortBy, on)
+import Protolude (ordNub, sortBy, on, headMay)
 
 import Control.Arrow (first)
 import Control.Monad
@@ -131,7 +131,7 @@ desugarImportsWithEnv externs modules = do
 --
 elaborateExports :: Exports -> Module -> Module
 elaborateExports exps (Module ss coms mn decls refs) =
-  Module ss coms mn decls $ ExplicitExports (reorderExports decls refs
+  Module ss coms mn decls $ resectionExports refs $ reorderExports decls refs
     $ elaboratedTypeRefs
     ++ go (TypeOpRef ss) exportedTypeOps
     ++ go (TypeClassRef ss) exportedTypeClasses
@@ -139,7 +139,6 @@ elaborateExports exps (Module ss coms mn decls refs) =
     ++ go (ValueOpRef ss) exportedValueOps
     ++ go (KindRef ss) exportedKinds
     ++ filter isModuleRef (allExplicitExports refs)
-    ) []
   where
 
   elaboratedTypeRefs :: [DeclarationRef]
@@ -422,3 +421,24 @@ renameInModule imports (Module modSS coms mn decls exps) =
 
     where
     throwUnknown = throwError . errorMessage . UnknownName . fmap toName $ qname
+
+-- |
+-- Given the original module exports and a sorted, elaborated export list,
+-- create a new module exports list, with the elaborated exports in the
+-- appropriate sections.
+resectionExports :: ModuleExports -> [DeclarationRef] -> ModuleExports
+resectionExports NoExplicitExports refs = ExplicitExports refs []
+resectionExports (ExplicitExports _ sectioned) refs =
+    let (unsectioned', remaining) =
+          break (\r -> Just r == firstRef sectioned) refs
+        sectioned' = resection sectioned remaining []
+    in ExplicitExports unsectioned' sectioned'
+  where
+  firstRef = headMay . concatMap snd
+
+  resection [] _ acc = reverse acc
+  resection ((c, _):refs') remaining acc =
+    case firstRef refs' of
+      Nothing -> resection refs' [] $ (c, remaining):acc
+      Just ref -> let (newSection, remaining') = break (== ref) remaining
+                  in  resection refs' remaining' $ (c, newSection):acc

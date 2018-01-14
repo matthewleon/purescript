@@ -499,7 +499,7 @@ filterExportedChildren isTargetedKind runName expNames = fmap filterDecls
 
 allDeclarations :: Module -> [Declaration]
 allDeclarations Module{..} =
-  modDeclarations ++ concatMap snd modReExports
+  modDeclarations ++ concatMap snd modSections ++ concatMap snd modReExports
 
 (|>) :: a -> (a -> b) -> b
 x |> f = f x
