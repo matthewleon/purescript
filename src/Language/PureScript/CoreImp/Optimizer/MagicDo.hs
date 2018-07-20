@@ -49,6 +49,8 @@ magicDo''' effectModule C.EffectDictionaries{..} = everywhereTopDown convert
   convert (App _ (App _ bind [m]) [Function s1 Nothing [] (Block s2 js)]) | isDiscard bind =
     Function s1 (Just fnName) [] $ Block s2 (App s2 m [] : map applyReturns js )
   -- Desugar bind
+  -- I think this is going to be different for ST than for Eff or Effect,
+  -- since when we have ST.run we actually evaluate the function.
   convert (App _ (App _ bind [m]) [Function s1 Nothing [arg] (Block s2 js)]) | isBind bind =
     Function s1 (Just fnName) [] $ Block s2 (VariableIntroduction s2 arg (Just (App s2 m [])) : map applyReturns js)
   -- Desugar untilE
@@ -119,7 +121,7 @@ inlineST = everywhere convertBlock
     if agg then ref else Indexer s1 (StringLiteral s1 C.stRefValue) ref
   convert agg (App _ (App _ (App s1 f [ref]) [arg]) []) | isSTFunc C.writeSTRef f =
     if agg then Assignment s1 ref arg else Assignment s1 (Indexer s1 (StringLiteral s1 C.stRefValue) ref) arg
-  convert agg (App _ (App s1 f [ref]) [func]) | isSTFunc C.modifySTRef f =
+  convert agg (App _ (App _ (App s1 f [ref]) [func]) []) | isSTFunc C.modifySTRef f =
     if agg then Assignment s1 ref (App s1 func [ref]) else Assignment s1 (Indexer s1 (StringLiteral s1 C.stRefValue) ref) (App s1 func [Indexer s1 (StringLiteral s1 C.stRefValue) ref])
   convert _ other = other
   -- Check if an expression represents a function in the ST module
