@@ -273,6 +273,13 @@ effectDictionaries = EffectDictionaries
   , edMonadDict = "monadEffect"
   }
 
+stDictionaries :: EffectDictionaries
+stDictionaries = EffectDictionaries
+  { edApplicativeDict = "applicativeST"
+  , edBindDict = "bindST"
+  , edMonadDict = "monadST"
+  }
+
 discardUnitDictionary :: forall a. (IsString a) => a
 discardUnitDictionary = "discardUnit"
 
@@ -507,7 +514,7 @@ effect :: forall a. (IsString a) => a
 effect = "Effect"
 
 st :: forall a. (IsString a) => a
-st = "Control_Monad_ST"
+st = "Control_Monad_ST_Internal"
 
 controlApplicative :: forall a. (IsString a) => a
 controlApplicative = "Control_Applicative"

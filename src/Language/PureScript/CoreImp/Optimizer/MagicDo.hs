@@ -1,6 +1,6 @@
 -- | This module implements the "Magic Do" optimization, which inlines calls to return
 -- and bind for the Eff monad, as well as some of its actions.
-module Language.PureScript.CoreImp.Optimizer.MagicDo (magicDo, magicDo', inlineST) where
+module Language.PureScript.CoreImp.Optimizer.MagicDo (magicDo, magicDo', magicDo'', inlineST) where
 
 import Prelude.Compat
 import Protolude (ordNub)
@@ -28,13 +28,16 @@ import qualified Language.PureScript.Constants as C
 --    ...
 --  }
 magicDo :: AST -> AST
-magicDo = magicDo'' C.eff C.effDictionaries
+magicDo = magicDo''' C.eff C.effDictionaries
 
 magicDo' :: AST -> AST
-magicDo' = magicDo'' C.effect C.effectDictionaries
+magicDo' = magicDo''' C.effect C.effectDictionaries
 
-magicDo'' :: Text -> C.EffectDictionaries -> AST -> AST
-magicDo'' effectModule C.EffectDictionaries{..} = everywhereTopDown convert
+magicDo'' :: AST -> AST
+magicDo'' = magicDo''' C.st C.stDictionaries
+
+magicDo''' :: Text -> C.EffectDictionaries -> AST -> AST
+magicDo''' effectModule C.EffectDictionaries{..} = everywhereTopDown convert
   where
   -- The name of the function block which is added to denote a do block
   fnName = "__do"
@@ -54,6 +57,8 @@ magicDo'' effectModule C.EffectDictionaries{..} = everywhereTopDown convert
   -- Desugar whileE
   convert (App _ (App _ (App s1 f [arg1]) [arg2]) []) | isEffFunc C.whileE f =
     App s1 (Function s1 Nothing [] (Block s1 [ While s1 (App s1 arg1 []) (Block s1 [ App s1 arg2 [] ]), Return s1 $ ObjectLiteral s1 []])) []
+  -- TODO: Desugar for
+  -- TODO: Desugar foreach
   -- Inline __do returns
   convert (Return _ (App _ (Function _ (Just ident) [] body) [])) | ident == fnName = body
   -- Inline double applications
