@@ -211,22 +211,22 @@ whileE :: forall a. (IsString a) => a
 whileE = "whileE"
 
 runST :: forall a. (IsString a) => a
-runST = "runST"
+runST = "run"
 
 stRefValue :: forall a. (IsString a) => a
 stRefValue = "value"
 
 newSTRef :: forall a. (IsString a) => a
-newSTRef = "newSTRef"
+newSTRef = "new"
 
 readSTRef :: forall a. (IsString a) => a
-readSTRef = "readSTRef"
+readSTRef = "read"
 
 writeSTRef :: forall a. (IsString a) => a
-writeSTRef = "writeSTRef"
+writeSTRef = "write"
 
 modifySTRef :: forall a. (IsString a) => a
-modifySTRef = "modifySTRef"
+modifySTRef = "modify"
 
 mkFn :: forall a. (IsString a) => a
 mkFn = "mkFn"
