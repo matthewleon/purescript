@@ -110,19 +110,21 @@ inlineST = everywhere convertBlock
         usages = findAllSTUsagesIn arg
         allUsagesAreLocalVars = all (\u -> let v = toVar u in isJust v && fromJust v `elem` refs) usages
         localVarsDoNotEscape = all (\r -> length (r `appearingIn` arg) == length (filter (\u -> let v = toVar u in v == Just r) usages)) refs
-    in everywhere (convert (allUsagesAreLocalVars && localVarsDoNotEscape)) arg
+    in App Nothing (everywhere (convert (allUsagesAreLocalVars && localVarsDoNotEscape)) arg) []
   convertBlock other = other
   -- Convert a block in a safe way, preserving object wrappers of references,
   -- or in a more aggressive way, turning wrappers into local variables depending on the
   -- agg(ressive) parameter.
   convert agg (App s1 f [arg]) | isSTFunc C.newSTRef f =
    Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
+  {-
   convert agg (App _ (App s1 f [ref]) []) | isSTFunc C.readSTRef f =
     if agg then ref else Indexer s1 (StringLiteral s1 C.stRefValue) ref
   convert agg (App _ (App _ (App s1 f [ref]) [arg]) []) | isSTFunc C.writeSTRef f =
     if agg then Assignment s1 ref arg else Assignment s1 (Indexer s1 (StringLiteral s1 C.stRefValue) ref) arg
   convert agg (App _ (App _ (App s1 f [ref]) [func]) []) | isSTFunc C.modifySTRef f =
     if agg then Assignment s1 ref (App s1 func [ref]) else Assignment s1 (Indexer s1 (StringLiteral s1 C.stRefValue) ref) (App s1 func [Indexer s1 (StringLiteral s1 C.stRefValue) ref])
+  -}
   convert _ other = other
   -- Check if an expression represents a function in the ST module
   isSTFunc name (Indexer _ (StringLiteral _ name') (Var _ st)) = st == C.st && name == name'
