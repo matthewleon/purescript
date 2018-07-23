@@ -117,6 +117,8 @@ inlineST = everywhere convertBlock
   -- agg(ressive) parameter.
   convert agg (App s1 f [arg]) | isSTFunc C.newSTRef f =
    Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
+  convert agg (App _ (App s f [func]) [ref]) | isSTFunc C.modifySTRef f =
+    if agg then Assignment s ref (App s func [ref]) else Function Nothing Nothing [] (Block Nothing [Assignment s (Indexer s (StringLiteral s C.stRefValue) ref) (App s func [Indexer s (StringLiteral s C.stRefValue) ref])])
   {-
   convert agg (App _ (App s1 f [ref]) []) | isSTFunc C.readSTRef f =
     if agg then ref else Indexer s1 (StringLiteral s1 C.stRefValue) ref
