@@ -115,12 +115,16 @@ inlineST = everywhere convertBlock
   -- or in a more aggressive way, turning wrappers into local variables depending on the
   -- agg(ressive) parameter.
   -- TODO: handle agressive inlining
+  -- inline 'new'
   convert agg (App s2 (App s1 f [arg]) []) | isSTFunc C.newST f =
     ObjectLiteral s1 [(C.stRefValue, arg)]
+  -- inline 'read'
   convert agg (App s2 (App s1 f [arg]) []) | isSTFunc C.readST f =
     Indexer s1 (StringLiteral Nothing C.stRefValue) arg
+  -- inline 'write'
   convert agg (VariableIntroduction _ var (Just (App _ (App _ (App s1 f [arg]) [ref]) []))) | isSTFunc C.writeST f =
     Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) arg
+  -- inline 'modify'
   -- for now, I know two cases where modify can exist:
   -- 1) as a variable introduction, i.e. when it is bound to a variable
   -- 2) as a return, i.e. when it is the result of an ST computation
@@ -128,9 +132,13 @@ inlineST = everywhere convertBlock
     Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) (App s1 func [(Indexer s1 (StringLiteral Nothing C.stRefValue) ref)])
   convert agg (Return _ (App _ (App _ (App s1 f [func]) [ref]) [])) | isSTFunc C.modifyST f =
     Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) (App s1 func [(Indexer s1 (StringLiteral Nothing C.stRefValue) ref)])
+  -- inline 'for'
   convert agg (App _ (App _ (App _ (App s1 f [lo]) [hi]) [Function _ _ ["i"] (Block _ [(Return _ (Function _ _ [] body))])]) []) | isSTFunc C.forST f =
     For s1 "i" lo hi body
-
+  -- inline 'foreach'
+  -- there seems to be something wrong with this - my example doesn't work
+  convert agg (App _ (App _ (App s1 f [arr]) [Function _ _ ["i"] (Block _ [(Return _ (Function _ _ [] (Block _ body)))])]) []) | isSTFunc C.foreachST f =
+    ForIn s1 "i" arr (Block s1 (removeUnit body))
   {-
   convert agg (App s1 f [arg]) | isSTFunc C.newSTRef f =
     Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
@@ -166,3 +174,7 @@ inlineST = everywhere convertBlock
   -- Convert a AST value to a String if it is a Var
   toVar (Var _ v) = Just v
   toVar _ = Nothing
+  -- Remove the return value from a block
+  removeUnit ((Return _ arg):[]) = []
+  removeUnit [] = []
+  removeUnit (x:xs) = x : removeUnit xs
