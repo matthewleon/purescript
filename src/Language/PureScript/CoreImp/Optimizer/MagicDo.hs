@@ -49,8 +49,6 @@ magicDo''' effectModule C.EffectDictionaries{..} = everywhereTopDown convert
   convert (App _ (App _ bind [m]) [Function s1 Nothing [] (Block s2 js)]) | isDiscard bind =
     Function s1 (Just fnName) [] $ Block s2 (App s2 m [] : map applyReturns js )
   -- Desugar bind
-  -- I think this is going to be different for ST than for Eff or Effect,
-  -- since when we have ST.run we actually evaluate the function.
   convert (App _ (App _ bind [m]) [Function s1 Nothing [arg] (Block s2 js)]) | isBind bind =
     Function s1 (Just fnName) [] $ Block s2 (VariableIntroduction s2 arg (Just (App s2 m [])) : map applyReturns js)
   -- Desugar untilE
@@ -116,9 +114,26 @@ inlineST = everywhere convertBlock
   -- Convert a block in a safe way, preserving object wrappers of references,
   -- or in a more aggressive way, turning wrappers into local variables depending on the
   -- agg(ressive) parameter.
+  -- TODO: handle agressive inlining
+  convert agg (App s2 (App s1 f [arg]) []) | isSTFunc C.newST f =
+    ObjectLiteral s1 [(C.stRefValue, arg)]
+  convert agg (App s2 (App s1 f [arg]) []) | isSTFunc C.readST f =
+    Indexer s1 (StringLiteral Nothing C.stRefValue) arg
+  convert agg (VariableIntroduction _ var (Just (App _ (App _ (App s1 f [arg]) [ref]) []))) | isSTFunc C.writeST f =
+    Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) arg
+  -- for now, I know two cases where modify can exist:
+  -- 1) as a variable introduction, i.e. when it is bound to a variable
+  -- 2) as a return, i.e. when it is the result of an ST computation
+  convert agg (VariableIntroduction _ _ (Just (App _ (App _ (App s1 f [func]) [ref]) []))) | isSTFunc C.modifyST f =
+    Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) (App s1 func [(Indexer s1 (StringLiteral Nothing C.stRefValue) ref)])
+  convert agg (Return _ (App _ (App _ (App s1 f [func]) [ref]) [])) | isSTFunc C.modifyST f =
+    Assignment s1 (Indexer s1 (StringLiteral Nothing C.stRefValue) ref) (App s1 func [(Indexer s1 (StringLiteral Nothing C.stRefValue) ref)])
+  convert agg (App _ (App _ (App _ (App s1 f [lo]) [hi]) [Function _ _ ["i"] (Block _ [(Return _ (Function _ _ [] body))])]) []) | isSTFunc C.forST f =
+    For s1 "i" lo hi body
+
   {-
   convert agg (App s1 f [arg]) | isSTFunc C.newSTRef f =
-   Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
+    Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
   convert agg (App _ (App s f [func]) [ref]) | isSTFunc C.modifySTRef f =
     if agg then Assignment s ref (App s func [ref]) else Function Nothing Nothing [] (Block Nothing [Assignment s (Indexer s (StringLiteral s C.stRefValue) ref) (App s func [Indexer s (StringLiteral s C.stRefValue) ref])])
   convert agg (App _ (App s1 f [ref]) []) | isSTFunc C.readSTRef f =
