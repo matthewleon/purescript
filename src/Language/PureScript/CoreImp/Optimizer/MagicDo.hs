@@ -112,7 +112,6 @@ inlineST = everywhere convertBlock
         allUsagesAreLocalVars = all (\u -> let v = toVar u in isJust v && fromJust v `elem` refs) usages
         localVarsDoNotEscape = all (\r -> length (r `appearingIn` arg) == length (filter (\u -> let v = toVar u in v == Just r) usages)) refs
     in App Nothing (everywhere (convert (allUsagesAreLocalVars && localVarsDoNotEscape)) arg) []
-
   convertBlock other = other
   -- Convert a block in a safe way, preserving object wrappers of references,
   -- or in a more aggressive way, turning wrappers into local variables depending on the
@@ -120,6 +119,8 @@ inlineST = everywhere convertBlock
   {-
   convert agg (App s1 f [arg]) | isSTFunc C.newSTRef f =
    Function s1 Nothing [] (Block s1 [Return s1 $ if agg then arg else ObjectLiteral s1 [(mkString C.stRefValue, arg)]])
+  convert agg (App _ (App s f [func]) [ref]) | isSTFunc C.modifySTRef f =
+    if agg then Assignment s ref (App s func [ref]) else Function Nothing Nothing [] (Block Nothing [Assignment s (Indexer s (StringLiteral s C.stRefValue) ref) (App s func [Indexer s (StringLiteral s C.stRefValue) ref])])
   convert agg (App _ (App s1 f [ref]) []) | isSTFunc C.readSTRef f =
     if agg then ref else Indexer s1 (StringLiteral s1 C.stRefValue) ref
   convert agg (App _ (App _ (App s1 f [ref]) [arg]) []) | isSTFunc C.writeSTRef f =
