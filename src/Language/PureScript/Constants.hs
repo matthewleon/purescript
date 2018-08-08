@@ -210,8 +210,32 @@ untilE = "untilE"
 whileE :: forall a. (IsString a) => a
 whileE = "whileE"
 
+whileST :: forall a. (IsString a) => a
+whileST = "while"
+
 runST :: forall a. (IsString a) => a
 runST = "run"
+
+foreachST :: forall a. (IsString a) => a
+foreachST = "foreach"
+
+forST :: forall a. (IsString a) => a
+forST = "for"
+
+writeST :: forall a. (IsString a) => a
+writeST = "write"
+
+readST :: forall a. (IsString a) => a
+readST = "read"
+
+newST :: forall a. (IsString a) => a
+newST = "new"
+
+modify'ST :: forall a. (IsString a) => a
+modify'ST = "modify'"
+
+modifyST :: forall a. (IsString a) => a
+modifyST = "modify"
 
 stRefValue :: forall a. (IsString a) => a
 stRefValue = "value"
