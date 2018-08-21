@@ -178,3 +178,43 @@ inlineST = everywhere convertBlock
   removeUnit ((Return _ arg):[]) = []
   removeUnit [] = []
   removeUnit (x:xs) = x : removeUnit xs
+
+
+
+-- For Matt, here is the sample I am working with:
+
+{-
+
+module Main where
+
+import Prelude
+import Effect (Effect)
+import Effect.Class.Console (logShow, log)
+import Control.Monad.ST.Internal as ST
+import Control.Monad.ST.Ref as Ref
+
+count :: Int
+count = ST.run do
+  c <- Ref.new 0
+  x <- Ref.write 0 c
+  ST.for 0 11 \i -> do
+    _ <- ST.modify (add 0) c
+    ST.modify (add i) c
+  Ref.read c
+
+count' :: Int
+count' = ST.run do
+  c <- Ref.new 0
+  ST.foreach [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] \i -> do
+    _ <- ST.modify (add i) c
+    pure unit
+  Ref.read c
+
+main :: Effect Unit
+main = do
+  x <- pure 10
+  logShow count
+  logShow count'
+  log "Done!"
+
+-}
